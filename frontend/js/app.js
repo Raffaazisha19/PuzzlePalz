@@ -14,29 +14,27 @@ const state = {
     grid: { rows: 4, cols: 4 },
     progress: 0,
     timerInterval: null,
-    timerSeconds: 0
+    timerSeconds: 0,
+    initializedFromServer: false,
+    pendingImageChange: null
 };
 
 // ── Bootstrap ──
 window.addEventListener("DOMContentLoaded", () => {
-    // Parse room from URL
     const urlParams = new URLSearchParams(window.location.search);
     state.roomId = urlParams.get("room") || null;
 
-    // Hide gallery modal on load (it ships visible in the HTML)
+    // Hide gallery modal on load if room param exists (rejoin via invite link)
     const galleryModal = document.getElementById("gallery-modal");
-    if (galleryModal) {
+    if (state.roomId && galleryModal) {
         galleryModal.classList.add("hidden");
         galleryModal.classList.remove("flex");
     }
 
-    // Remove static decorative puzzle pieces from the HTML (they block the canvas)
+    // Remove static decorative puzzle pieces from the HTML
     document.querySelectorAll("main > .absolute.z-20").forEach(el => el.remove());
 
-    // Setup gallery card click handlers
     setupGalleryHandlers();
-
-    // Setup invite link handler
     setupInvitationHandler();
 
     // If a room param exists, start game immediately with default image
@@ -71,7 +69,21 @@ function setupGalleryHandlers() {
                             const reader = new FileReader();
                             reader.onload = (ev) => {
                                 closeModal("gallery-modal");
-                                startGame(ev.target.result, 4, 4);
+                                if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                                    wsSend({
+                                        type: "change_image",
+                                        image_url: ev.target.result,
+                                        rows: 4,
+                                        cols: 4
+                                    });
+                                } else {
+                                    state.pendingImageChange = {
+                                        image_url: ev.target.result,
+                                        rows: 4,
+                                        cols: 4
+                                    };
+                                    startGame(ev.target.result, 4, 4);
+                                }
                             };
                             reader.readAsDataURL(file);
                         }
@@ -82,7 +94,21 @@ function setupGalleryHandlers() {
             }
             if (img && img.src) {
                 closeModal("gallery-modal");
-                startGame(img.src, side, side);
+                if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                    wsSend({
+                        type: "change_image",
+                        image_url: img.src,
+                        rows: side,
+                        cols: side
+                    });
+                } else {
+                    state.pendingImageChange = {
+                        image_url: img.src,
+                        rows: side,
+                        cols: side
+                    };
+                    startGame(img.src, side, side);
+                }
             }
         });
     });
@@ -92,6 +118,7 @@ function setupGalleryHandlers() {
 function startGame(imageUrl, rows, cols) {
     state.grid.rows = rows;
     state.grid.cols = cols;
+    state.initializedFromServer = false;
 
     // Generate room if none
     if (!state.roomId) {
@@ -121,12 +148,12 @@ function startGame(imageUrl, rows, cols) {
     state.image = new Image();
     state.image.crossOrigin = "anonymous";
     state.image.onload = () => {
-        // Set canvas resolution to match container
         const rect = container.getBoundingClientRect();
         state.canvas.width = rect.width;
         state.canvas.height = rect.height;
-
-        generatePieces();
+        if (!state.initializedFromServer) {
+            generatePieces();
+        }
         draw();
         startTimer();
     };
@@ -136,7 +163,6 @@ function startGame(imageUrl, rows, cols) {
     const goalImg = document.querySelector(".aspect-video img");
     if (goalImg) goalImg.src = imageUrl;
 
-    // Update progress to 0
     updateProgressBar();
 
     // Pointer events
@@ -145,127 +171,34 @@ function startGame(imageUrl, rows, cols) {
     state.canvas.addEventListener("pointerup", onPointerUp);
     state.canvas.addEventListener("pointerleave", onPointerUp);
 
-    // Connect WebSocket
     connectWS();
 }
 
-<<<<<<< HEAD
-    const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-                 ? "localhost:8000"
-                 : "https://laughing-fishstick-v65wwjwrpw9j2vgv-8000.app.github.dev/"; // Ganti dengan domain Codespaces Anda
-
-    state.ws = new WebSocket(`${wsProto}//${host}/ws/${state.roomId}?player_id=${state.playerId}&name=${state.playerName}`);
-
-    state.ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "init") {
-            // Synchronize room settings & pieces
-            state.grid.rows = msg.rows;
-            state.grid.cols = msg.cols;
-            if (msg.image_url && state.image.src !== msg.image_url) {
-                loadPuzzle(msg.image_url, msg.rows, msg.cols, false);
-            }
-            state.pieces = msg.pieces;
-            updateActivePlayerText(msg.players);
-            updateProgressBar();
-            draw();
-        } else if (msg.type === "player_change") {
-            updateActivePlayerText(msg.players);
-        } else if (msg.type === "move") {
-            const piece = state.pieces.find(p => p.id === msg.piece_id);
-            if (piece && (!state.draggedPiece || state.draggedPiece.id !== msg.piece_id)) {
-                piece.x = msg.x;
-                piece.y = msg.y;
-                piece.locked = msg.locked;
-                draw();
-            }
-        } else if (msg.type === "cursor") {
-            state.otherCursors[msg.player_id] = { x: msg.x, y: msg.y, name: msg.name };
-            draw();
-        } else if (msg.type === "lock") {
-            const piece = state.pieces.find(p => p.id === msg.piece_id);
-            if (piece) {
-                piece.x = msg.x;
-                piece.y = msg.y;
-                piece.locked = true;
-                updateProgressBar();
-                draw();
-            }
-        }
-    };
-}
-
-function loadPuzzle(src, rows, cols, isNewRoom = true) {
-    state.grid.rows = rows;
-    state.grid.cols = cols;
-    state.image.crossOrigin = "anonymous";
-    state.image.onload = () => {
-        // Adjust Canvas Aspect Ratio
-        const maxW = 800;
-        const maxH = 600;
-        let w = state.image.width;
-        let h = state.image.height;
-        if (w > maxW) {
-            h = (maxW / w) * h;
-            w = maxW;
-        }
-        if (h > maxH) {
-            w = (maxH / h) * w;
-            h = maxH;
-        }
-        state.canvas.width = w;
-        state.canvas.height = h;
-
-        if (isNewRoom) {
-            generatePieces(w, h);
-        }
-        draw();
-    };
-    state.image.src = src;
-
-    // Update goal image thumbnail
-    const goalImg = document.querySelector(".w-full.aspect-video img");
-    if (goalImg) goalImg.src = src;
-}
-
-function generatePieces(width, height) {
-    const pw = width / state.grid.cols;
-    const ph = height / state.grid.rows;
-=======
 // ── Piece Generation — scatter around edges ──
 function generatePieces() {
     const cw = state.canvas.width;
     const ch = state.canvas.height;
     const pw = cw / state.grid.cols;
     const ph = ch / state.grid.rows;
->>>>>>> 85a0a29 (Fix gallery selector, invitation link generator, and clean puzzle pieces rendering)
     state.pieces = [];
 
-    // Define edge zones: top, bottom, left, right strips
     const margin = 10;
     const zones = [
-        // top strip
         { xMin: margin, xMax: cw - pw - margin, yMin: margin, yMax: ph },
-        // bottom strip
         { xMin: margin, xMax: cw - pw - margin, yMin: ch - ph * 1.5, yMax: ch - ph * 0.5 },
-        // left strip
         { xMin: margin, xMax: pw, yMin: margin, yMax: ch - ph - margin },
-        // right strip
         { xMin: cw - pw * 1.5, xMax: cw - pw * 0.5, yMin: margin, yMax: ch - ph - margin }
     ];
 
     for (let r = 0; r < state.grid.rows; r++) {
         for (let c = 0; c < state.grid.cols; c++) {
-            // Pick a random edge zone
             const zone = zones[Math.floor(Math.random() * zones.length)];
             const sx = zone.xMin + Math.random() * (zone.xMax - zone.xMin);
             const sy = zone.yMin + Math.random() * (zone.yMax - zone.yMin);
-
             state.pieces.push({
                 id: `p_${r}_${c}`,
-                gx: c * pw,   // goal x
-                gy: r * ph,   // goal y
+                gx: c * pw,
+                gy: r * ph,
                 x: sx,
                 y: sy,
                 locked: false
@@ -284,7 +217,7 @@ function draw() {
 
     state.ctx.clearRect(0, 0, cw, ch);
 
-    // Draw target grid lines (faint)
+    // Draw target grid lines
     state.ctx.strokeStyle = "rgba(22, 29, 31, 0.12)";
     state.ctx.lineWidth = 1;
     for (let r = 0; r < state.grid.rows; r++) {
@@ -293,11 +226,9 @@ function draw() {
         }
     }
 
-    // Scale factors from canvas to original image
     const scaleX = state.image.naturalWidth / cw;
     const scaleY = state.image.naturalHeight / ch;
 
-    // Draw pieces (non-dragged first, dragged on top)
     state.pieces.forEach(p => { if (p !== state.draggedPiece) drawPiece(p, pw, ph, scaleX, scaleY); });
     if (state.draggedPiece) drawPiece(state.draggedPiece, pw, ph, scaleX, scaleY);
 
@@ -319,28 +250,17 @@ function draw() {
 function drawPiece(p, pw, ph, scaleX, scaleY) {
     const ctx = state.ctx;
     ctx.save();
-
     if (!p.locked) {
         ctx.shadowColor = "rgba(22, 29, 31, 0.5)";
         ctx.shadowBlur = 8;
         ctx.shadowOffsetX = 3;
         ctx.shadowOffsetY = 3;
     }
-
-    // Clip region for the piece
     ctx.beginPath();
     ctx.roundRect(p.x, p.y, pw, ph, 4);
     ctx.clip();
-
-    // Draw corresponding image slice at piece position
-    ctx.drawImage(
-        state.image,
-        p.gx * scaleX, p.gy * scaleY, pw * scaleX, ph * scaleY,  // source rect
-        p.x, p.y, pw, ph                                            // dest rect
-    );
+    ctx.drawImage(state.image, p.gx * scaleX, p.gy * scaleY, pw * scaleX, ph * scaleY, p.x, p.y, pw, ph);
     ctx.restore();
-
-    // Border
     ctx.strokeStyle = p.locked ? "rgba(76, 179, 65, 0.6)" : "#161d1f";
     ctx.lineWidth = p.locked ? 2 : 2.5;
     ctx.beginPath();
@@ -361,14 +281,12 @@ function onPointerDown(e) {
     const { x, y } = getCanvasPos(e);
     const pw = state.canvas.width / state.grid.cols;
     const ph = state.canvas.height / state.grid.rows;
-
     for (let i = state.pieces.length - 1; i >= 0; i--) {
         const p = state.pieces[i];
         if (!p.locked && x >= p.x && x <= p.x + pw && y >= p.y && y <= p.y + ph) {
             state.draggedPiece = p;
             state.dragOffset.x = x - p.x;
             state.dragOffset.y = y - p.y;
-            // Bring to top
             state.pieces.splice(i, 1);
             state.pieces.push(p);
             state.canvas.style.cursor = "grabbing";
@@ -379,10 +297,7 @@ function onPointerDown(e) {
 
 function onPointerMove(e) {
     const { x, y } = getCanvasPos(e);
-
-    // Broadcast cursor
     wsSend({ type: "cursor", x, y });
-
     if (state.draggedPiece) {
         state.draggedPiece.x = x - state.dragOffset.x;
         state.draggedPiece.y = y - state.dragOffset.y;
@@ -395,16 +310,12 @@ function onPointerUp() {
     if (!state.draggedPiece) return;
     const p = state.draggedPiece;
     state.canvas.style.cursor = "grab";
-
-    // Snap check (threshold 25px)
     if (Math.hypot(p.x - p.gx, p.y - p.gy) < 25) {
         p.x = p.gx;
         p.y = p.gy;
         p.locked = true;
         wsSend({ type: "lock", piece_id: p.id, x: p.x, y: p.y });
         updateProgressBar();
-
-        // Check completion
         if (state.pieces.every(pc => pc.locked)) {
             stopTimer();
             setTimeout(() => alert(`🎉 Puzzle selesai! Waktu: ${formatTime(state.timerSeconds)}`), 200);
@@ -412,7 +323,6 @@ function onPointerUp() {
     } else {
         wsSend({ type: "move", piece_id: p.id, x: p.x, y: p.y, locked: false });
     }
-
     state.draggedPiece = null;
     draw();
 }
@@ -422,10 +332,8 @@ function updateProgressBar() {
     const locked = state.pieces.filter(p => p.locked).length;
     const total = state.pieces.length || 1;
     state.progress = Math.round((locked / total) * 100);
-
     const pctText = document.querySelector(".mt-3.flex .text-primary");
     if (pctText) pctText.innerText = `${state.progress}%`;
-
     const bar = document.querySelector(".h-4.mt-1 div");
     if (bar) bar.style.width = `${state.progress}%`;
 }
@@ -463,6 +371,14 @@ function formatTime(s) {
 // ── WebSocket ──
 function connectWS() {
     try {
+        if (state.ws) {
+            try {
+                state.ws.close();
+            } catch (e) {
+                console.error("Error closing old WebSocket", e);
+            }
+        }
+
         const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
         const host = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
                      ? "localhost:8000"
@@ -470,13 +386,50 @@ function connectWS() {
 
         state.ws = new WebSocket(`${wsProto}//${host}/ws/${state.roomId}?player_id=${state.playerId}&name=${state.playerName}`);
 
+        state.ws.onopen = () => {
+            console.log("WebSocket connected");
+            if (state.pendingImageChange) {
+                wsSend({
+                    type: "change_image",
+                    image_url: state.pendingImageChange.image_url,
+                    rows: state.pendingImageChange.rows,
+                    cols: state.pendingImageChange.cols
+                });
+                state.pendingImageChange = null;
+            }
+        };
+
         state.ws.onmessage = (event) => {
             const msg = JSON.parse(event.data);
             if (msg.type === "init") {
-                if (msg.pieces) state.pieces = msg.pieces;
+                state.initializedFromServer = true;
+                state.grid.rows = msg.rows;
+                state.grid.cols = msg.cols;
                 if (msg.players) updateActivePlayerText(msg.players);
-                updateProgressBar();
-                draw();
+
+                if (msg.image_url && (!state.image.src || state.image.src !== msg.image_url)) {
+                    state.image = new Image();
+                    state.image.crossOrigin = "anonymous";
+                    state.image.onload = () => {
+                        const container = document.querySelector(".border-dashed");
+                        if (container && state.canvas) {
+                            const rect = container.getBoundingClientRect();
+                            state.canvas.width = rect.width;
+                            state.canvas.height = rect.height;
+                        }
+                        if (msg.pieces) state.pieces = msg.pieces;
+                        updateProgressBar();
+                        draw();
+                    };
+                    state.image.src = msg.image_url;
+
+                    const goalImg = document.querySelector(".aspect-video img");
+                    if (goalImg) goalImg.src = msg.image_url;
+                } else {
+                    if (msg.pieces) state.pieces = msg.pieces;
+                    updateProgressBar();
+                    draw();
+                }
             } else if (msg.type === "player_change") {
                 updateActivePlayerText(msg.players);
             } else if (msg.type === "move") {
