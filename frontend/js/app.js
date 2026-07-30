@@ -21,6 +21,16 @@ const state = {
 
 // ── Bootstrap ──
 window.addEventListener("DOMContentLoaded", () => {
+    // Prompt for player name
+    const storedName = localStorage.getItem("playerName");
+    let name = prompt("Masukkan nama Anda untuk bermain (atau kosongkan untuk default):", storedName || "");
+    if (name && name.trim()) {
+        state.playerName = name.trim();
+        localStorage.setItem("playerName", state.playerName);
+    } else if (storedName) {
+        state.playerName = storedName;
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
     state.roomId = urlParams.get("room") || null;
 
