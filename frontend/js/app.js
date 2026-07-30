@@ -444,6 +444,49 @@ function formatTime(s) {
     return `${h}:${m}:${sec}`;
 }
 
+// ── Connection Status ──
+function updateConnectionStatus(status) {
+    const badge = document.getElementById("connection-status");
+    if (!badge) return;
+    const textEl = badge.querySelector(".font-label-bold");
+    const iconEl = badge.querySelector(".material-symbols-outlined");
+
+    if (status === "connecting") {
+        badge.style.backgroundColor = "#ffe086"; // yellow
+        badge.style.color = "#231b00";
+        if (textEl) {
+            textEl.innerText = "Connecting...";
+            textEl.style.color = "#231b00";
+        }
+        if (iconEl) {
+            iconEl.innerText = "sync";
+            iconEl.style.color = "#231b00";
+        }
+    } else if (status === "online") {
+        badge.style.backgroundColor = "#91fb7f"; // green
+        badge.style.color = "#002201";
+        if (textEl) {
+            textEl.innerText = "Multiplayer Online";
+            textEl.style.color = "#002201";
+        }
+        if (iconEl) {
+            iconEl.innerText = "group";
+            iconEl.style.color = "#002201";
+        }
+    } else {
+        badge.style.backgroundColor = "#ffdad6"; // red
+        badge.style.color = "#93000a";
+        if (textEl) {
+            textEl.innerText = "Offline Mode (Single)";
+            textEl.style.color = "#93000a";
+        }
+        if (iconEl) {
+            iconEl.innerText = "cloud_off";
+            iconEl.style.color = "#93000a";
+        }
+    }
+}
+
 // ── WebSocket ──
 function connectWS() {
     try {
@@ -455,6 +498,8 @@ function connectWS() {
             }
         }
 
+        updateConnectionStatus("connecting");
+
         const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
         const host = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
                      ? "localhost:8000"
@@ -464,6 +509,7 @@ function connectWS() {
 
         state.ws.onopen = () => {
             console.log("WebSocket connected");
+            updateConnectionStatus("online");
             if (state.pendingImageChange) {
                 wsSend({
                     type: "change_image",
@@ -529,9 +575,18 @@ function connectWS() {
             }
         };
 
-        state.ws.onerror = () => { console.warn("WebSocket error — game works offline (single player)"); };
+        state.ws.onclose = () => {
+            console.warn("WebSocket closed — game works offline");
+            updateConnectionStatus("offline");
+        };
+
+        state.ws.onerror = () => {
+            console.warn("WebSocket error — game works offline (single player)");
+            updateConnectionStatus("offline");
+        };
     } catch (e) {
         console.warn("WebSocket unavailable — single player mode");
+        updateConnectionStatus("offline");
     }
 }
 
