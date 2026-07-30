@@ -54,7 +54,7 @@ function initGame() {
     const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
                  ? "localhost:8000"
-                 : "laughing-fishstick-v65wwjwrpw9j2vgv-8000.app.github.dev/"; // Ganti dengan domain Codespaces Anda
+                 : "https://laughing-fishstick-v65wwjwrpw9j2vgv-8000.app.github.dev/"; // Ganti dengan domain Codespaces Anda
 
     state.ws = new WebSocket(`${wsProto}//${host}/ws/${state.roomId}?player_id=${state.playerId}&name=${state.playerName}`);
 
