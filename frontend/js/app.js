@@ -142,15 +142,15 @@ function startGame(imageUrl, rows, cols) {
         inviteInput.value = `${window.location.origin}${window.location.pathname}?room=${state.roomId}`;
     }
 
-    // Setup canvas inside the dashed grid area
-    const container = document.querySelector(".border-dashed");
+    // Setup canvas inside the play-area container
+    const container = document.getElementById("play-area");
     if (!container) return;
     container.innerHTML = "";
     container.style.position = "relative";
 
     state.canvas = document.createElement("canvas");
     state.canvas.id = "puzzle-canvas";
-    state.canvas.style.cssText = "width:100%;height:100%;display:block;cursor:grab;";
+    state.canvas.style.cssText = "width:100%;height:100%;object-fit:contain;display:block;cursor:grab;background:transparent;";
     container.appendChild(state.canvas);
     state.ctx = state.canvas.getContext("2d");
 
@@ -361,6 +361,13 @@ function getCanvasPos(e) {
     };
 }
 
+function getGroup(piece) {
+    if (piece.locked) return [];
+    const ox = piece.x - piece.gx;
+    const oy = piece.y - piece.gy;
+    return state.pieces.filter(p => !p.locked && Math.abs((p.x - p.gx) - ox) < 1.0 && Math.abs((p.y - p.gy) - oy) < 1.0);
+}
+
 function onPointerDown(e) {
     const { x, y } = getCanvasPos(e);
     const boardWidth = 480;
@@ -373,8 +380,19 @@ function onPointerDown(e) {
             state.draggedPiece = p;
             state.dragOffset.x = x - p.x;
             state.dragOffset.y = y - p.y;
-            state.pieces.splice(i, 1);
-            state.pieces.push(p);
+            
+            // Get all pieces in this group
+            state.draggedGroup = getGroup(p);
+            
+            // Move group to the top of pieces array so they draw on top of other pieces
+            state.draggedGroup.forEach(gPiece => {
+                const idx = state.pieces.indexOf(gPiece);
+                if (idx > -1) {
+                    state.pieces.splice(idx, 1);
+                    state.pieces.push(gPiece);
+                }
+            });
+            
             state.canvas.style.cursor = "grabbing";
             break;
         }
@@ -384,32 +402,88 @@ function onPointerDown(e) {
 function onPointerMove(e) {
     const { x, y } = getCanvasPos(e);
     wsSend({ type: "cursor", x, y });
-    if (state.draggedPiece) {
-        state.draggedPiece.x = x - state.dragOffset.x;
-        state.draggedPiece.y = y - state.dragOffset.y;
-        wsSend({ type: "move", piece_id: state.draggedPiece.id, x: state.draggedPiece.x, y: state.draggedPiece.y });
+    if (state.draggedPiece && state.draggedGroup) {
+        const targetX = x - state.dragOffset.x;
+        const targetY = y - state.dragOffset.y;
+        const dx = targetX - state.draggedPiece.x;
+        const dy = targetY - state.draggedPiece.y;
+        
+        state.draggedGroup.forEach(p => {
+            p.x += dx;
+            p.y += dy;
+            wsSend({ type: "move", piece_id: p.id, x: p.x, y: p.y });
+        });
         draw();
     }
 }
 
 function onPointerUp() {
-    if (!state.draggedPiece) return;
-    const p = state.draggedPiece;
+    if (!state.draggedPiece || !state.draggedGroup) return;
+    const leader = state.draggedPiece;
     state.canvas.style.cursor = "grab";
-    if (Math.hypot(p.x - p.gx, p.y - p.gy) < 25) {
-        p.x = p.gx;
-        p.y = p.gy;
-        p.locked = true;
-        wsSend({ type: "lock", piece_id: p.id, x: p.x, y: p.y });
+    
+    // Check snapping to the board (locks the entire group)
+    const offsetToTarget = Math.hypot(leader.x - leader.gx, leader.y - leader.gy);
+    if (offsetToTarget < 25) {
+        state.draggedGroup.forEach(p => {
+            p.x = p.gx;
+            p.y = p.gy;
+            p.locked = true;
+            wsSend({ type: "lock", piece_id: p.id, x: p.x, y: p.y });
+        });
         updateProgressBar();
         if (state.pieces.every(pc => pc.locked)) {
             stopTimer();
             setTimeout(() => alert(`🎉 Puzzle selesai! Waktu: ${formatTime(state.timerSeconds)}`), 200);
         }
     } else {
-        wsSend({ type: "move", piece_id: p.id, x: p.x, y: p.y, locked: false });
+        // Check snapping to any other piece not in our group
+        let snapped = false;
+        for (const other of state.pieces) {
+            if (state.draggedGroup.includes(other)) continue;
+            
+            const targetOX = other.x - other.gx;
+            const targetOY = other.y - other.gy;
+            const currentOX = leader.x - leader.gx;
+            const currentOY = leader.y - leader.gy;
+            
+            if (Math.hypot(currentOX - targetOX, currentOY - targetOY) < 25) {
+                const alignDX = targetOX - currentOX;
+                const alignDY = targetOY - currentOY;
+                
+                state.draggedGroup.forEach(p => {
+                    p.x += alignDX;
+                    p.y += alignDY;
+                    wsSend({ type: "move", piece_id: p.id, x: p.x, y: p.y, locked: p.locked });
+                });
+                
+                // If snapping to a locked piece, lock this entire group as well
+                if (other.locked) {
+                    state.draggedGroup.forEach(p => {
+                        p.x = p.gx;
+                        p.y = p.gy;
+                        p.locked = true;
+                        wsSend({ type: "lock", piece_id: p.id, x: p.x, y: p.y });
+                    });
+                    updateProgressBar();
+                    if (state.pieces.every(pc => pc.locked)) {
+                        stopTimer();
+                        setTimeout(() => alert(`🎉 Puzzle selesai! Waktu: ${formatTime(state.timerSeconds)}`), 200);
+                    }
+                }
+                snapped = true;
+                break;
+            }
+        }
+        
+        if (!snapped) {
+            state.draggedGroup.forEach(p => {
+                wsSend({ type: "move", piece_id: p.id, x: p.x, y: p.y, locked: false });
+            });
+        }
     }
     state.draggedPiece = null;
+    state.draggedGroup = null;
     draw();
 }
 

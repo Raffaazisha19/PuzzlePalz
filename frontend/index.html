@@ -135,7 +135,15 @@
     </header>
 
     <!-- Main Workspace -->
-    <main class="flex-grow relative w-full h-full p-margin-mobile md:p-margin-desktop flex items-center justify-center">
+    <main class="flex-grow relative w-full h-full flex items-center justify-center overflow-hidden">
+        <!-- Play Area Container -->
+        <div id="play-area" class="w-full h-full absolute inset-0 bg-surface-container-low flex items-center justify-center">
+            <div class="text-center absolute pointer-events-none">
+                <span class="material-symbols-outlined text-outline text-[48px] mb-2 opacity-50">extension</span>
+                <p class="font-headline-sm text-headline-sm text-outline opacity-50">Choose a puzzle from Gallery to start</p>
+            </div>
+        </div>
+
         <!-- Top Right Reference Panel (Goal) -->
         <div class="absolute top-8 right-8 bg-surface-container-lowest border-[4px] border-on-surface shadow-[6px_6px_0px_0px_rgba(22,29,31,1)] rounded-2xl p-3 z-30 w-64 rotate-2 hover:rotate-0 transition-transform duration-300">
             <div class="flex items-center justify-between mb-3 border-b-2 border-outline-variant pb-2">
@@ -153,20 +161,6 @@
             </div>
             <div class="w-full h-4 mt-1 bg-surface-container-highest border-2 border-on-surface rounded-full overflow-hidden">
                 <div class="h-full bg-tertiary-container w-[0%] border-r-2 border-on-surface transition-all duration-300"></div>
-            </div>
-        </div>
-
-        <!-- Central Workspace Canvas Frame -->
-        <div class="relative w-full max-w-[900px] aspect-[4/3] bg-surface-container-lowest border-[6px] border-on-surface shadow-[12px_12px_0px_0px_rgba(22,29,31,1)] rounded-[32px] p-6 z-10 flex flex-col">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="font-headline-md text-headline-md text-on-surface">Jigsaw Workspace</h2>
-            </div>
-            <!-- Interactive Play Area -->
-            <div class="flex-grow w-full border-[4px] border-dashed border-outline rounded-2xl relative overflow-hidden bg-surface-container-low flex items-center justify-center border-dashed">
-                <div class="text-center absolute pointer-events-none">
-                    <span class="material-symbols-outlined text-outline text-[48px] mb-2 opacity-50">extension</span>
-                    <p class="font-headline-sm text-headline-sm text-outline opacity-50">Choose a puzzle from Gallery to start</p>
-                </div>
             </div>
         </div>
     </main>
