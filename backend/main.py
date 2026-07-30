@@ -17,6 +17,55 @@ app.add_middleware(
 # In-memory session tracking for websockets: {room_id: {player_id: {"ws": WebSocket, "name": str}}}
 rooms_active: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
+def generate_piece_coords(rows: int, cols: int):
+    board_w = 480
+    board_h = 360
+    board_x = 160
+    board_y = 120
+    
+    pw = board_w / cols
+    ph = board_h / rows
+    
+    # Define scatter zones outside the board
+    zones = []
+    
+    # Left zone
+    if board_x - pw - 20 > 10:
+        zones.append(("left", 10, board_x - pw - 10, 10, 600 - ph - 10))
+    # Right zone
+    if 800 - pw - 10 > board_x + board_w + 10:
+        zones.append(("right", board_x + board_w + 10, 800 - pw - 10, 10, 600 - ph - 10))
+    # Top zone
+    if board_y - ph - 20 > 10:
+        zones.append(("top", board_x, board_x + board_w - pw, 10, board_y - ph - 10))
+    # Bottom zone
+    if 600 - ph - 10 > board_y + board_h + 10:
+        zones.append(("bottom", board_x, board_x + board_w - pw, board_y + board_h + 10, 600 - ph - 10))
+        
+    import random
+    pieces = []
+    for r in range(rows):
+        for c in range(cols):
+            gx = board_x + c * pw
+            gy = board_y + r * ph
+            
+            if zones:
+                zone = random.choice(zones)
+                sx = random.uniform(zone[1], zone[2])
+                sy = random.uniform(zone[3], zone[4])
+            else:
+                sx = random.uniform(0, 800 - pw)
+                sy = random.uniform(0, 600 - ph)
+                
+            pieces.append({
+                "id": f"p_{r}_{c}",
+                "gx": gx,
+                "gy": gy,
+                "x": sx,
+                "y": sy
+            })
+    return pieces
+
 def get_or_create_room_db(room_id: str, default_img: str = "", default_rows: int = 4, default_cols: int = 4):
     with database.get_db() as conn:
         row = conn.execute("SELECT * FROM rooms WHERE id = ?", (room_id,)).fetchone()
@@ -26,17 +75,12 @@ def get_or_create_room_db(room_id: str, default_img: str = "", default_rows: int
                 (room_id, default_img, default_rows, default_cols)
             )
             # Generate initial pieces
-            pw = 800 / default_cols
-            ph = 600 / default_rows
-            import random
-            for r in range(default_rows):
-                for c in range(default_cols):
-                    scatter_x = random.uniform(0, 800 - pw)
-                    scatter_y = random.uniform(0, 600 - ph)
-                    conn.execute(
-                        "INSERT INTO pieces (id, room_id, gx, gy, x, y, locked) VALUES (?, ?, ?, ?, ?, ?, 0)",
-                        (f"p_{r}_{c}", room_id, c * pw, r * ph, scatter_x, scatter_y)
-                    )
+            pieces = generate_piece_coords(default_rows, default_cols)
+            for p in pieces:
+                conn.execute(
+                    "INSERT INTO pieces (id, room_id, gx, gy, x, y, locked) VALUES (?, ?, ?, ?, ?, ?, 0)",
+                    (p["id"], room_id, p["gx"], p["gy"], p["x"], p["y"])
+                )
             conn.commit()
             return {"id": room_id, "image_url": default_img, "rows": default_rows, "cols": default_cols}
         return dict(row)
@@ -62,17 +106,12 @@ def change_room_image_db(room_id: str, image_url: str, rows: int, cols: int):
         )
         # Clear old pieces and regenerate
         conn.execute("DELETE FROM pieces WHERE room_id = ?", (room_id,))
-        pw = 800 / cols
-        ph = 600 / rows
-        import random
-        for r in range(rows):
-            for c in range(cols):
-                scatter_x = random.uniform(0, 800 - pw)
-                scatter_y = random.uniform(0, 600 - ph)
-                conn.execute(
-                    "INSERT INTO pieces (id, room_id, gx, gy, x, y, locked) VALUES (?, ?, ?, ?, ?, ?, 0)",
-                    (f"p_{r}_{c}", room_id, c * pw, r * ph, scatter_x, scatter_y)
-                )
+        pieces = generate_piece_coords(rows, cols)
+        for p in pieces:
+            conn.execute(
+                "INSERT INTO pieces (id, room_id, gx, gy, x, y, locked) VALUES (?, ?, ?, ?, ?, ?, 0)",
+                (p["id"], room_id, p["gx"], p["gy"], p["x"], p["y"])
+            )
         conn.commit()
 
 async def broadcast_to_room(room_id: str, message: dict, exclude_player_id: str = None):

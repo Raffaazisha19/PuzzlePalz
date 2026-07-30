@@ -56,8 +56,8 @@ function setupGalleryHandlers() {
             let side = 4;
             if (diffLabel) {
                 const t = diffLabel.innerText.trim().toLowerCase();
-                if (t === "medium") side = 5;
-                else if (t === "hard") side = 6;
+                if (t === "medium") side = 6;
+                else if (t === "hard") side = 8;
                 else if (t === "new") {
                     // Custom puzzle upload
                     const fileInput = document.createElement("input");
@@ -148,9 +148,8 @@ function startGame(imageUrl, rows, cols) {
     state.image = new Image();
     state.image.crossOrigin = "anonymous";
     state.image.onload = () => {
-        const rect = container.getBoundingClientRect();
-        state.canvas.width = rect.width;
-        state.canvas.height = rect.height;
+        state.canvas.width = 800;
+        state.canvas.height = 600;
         if (!state.initializedFromServer) {
             generatePieces();
         }
@@ -174,31 +173,50 @@ function startGame(imageUrl, rows, cols) {
     connectWS();
 }
 
-// ── Piece Generation — scatter around edges ──
+// ── Piece Generation ──
 function generatePieces() {
-    const cw = state.canvas.width;
-    const ch = state.canvas.height;
-    const pw = cw / state.grid.cols;
-    const ph = ch / state.grid.rows;
+    const boardWidth = 480;
+    const boardHeight = 360;
+    const boardX = 160;
+    const boardY = 120;
+    const pw = boardWidth / state.grid.cols;
+    const ph = boardHeight / state.grid.rows;
     state.pieces = [];
 
-    const margin = 10;
-    const zones = [
-        { xMin: margin, xMax: cw - pw - margin, yMin: margin, yMax: ph },
-        { xMin: margin, xMax: cw - pw - margin, yMin: ch - ph * 1.5, yMax: ch - ph * 0.5 },
-        { xMin: margin, xMax: pw, yMin: margin, yMax: ch - ph - margin },
-        { xMin: cw - pw * 1.5, xMax: cw - pw * 0.5, yMin: margin, yMax: ch - ph - margin }
-    ];
+    // Define outside zones
+    const zones = [];
+    // Left zone
+    if (boardX - pw - 20 > 10) {
+        zones.push({ xMin: 10, xMax: boardX - pw - 10, yMin: 10, yMax: 600 - ph - 10 });
+    }
+    // Right zone
+    if (800 - pw - 10 > boardX + boardWidth + 10) {
+        zones.push({ xMin: boardX + boardWidth + 10, xMax: 800 - pw - 10, yMin: 10, yMax: 600 - ph - 10 });
+    }
+    // Top zone
+    if (boardY - ph - 20 > 10) {
+        zones.push({ xMin: boardX, xMax: boardX + boardWidth - pw, yMin: 10, yMax: boardY - ph - 10 });
+    }
+    // Bottom zone
+    if (600 - ph - 10 > boardY + boardHeight + 10) {
+        zones.push({ xMin: boardX, xMax: boardX + boardWidth - pw, yMin: boardY + boardHeight + 10, yMax: 600 - ph - 10 });
+    }
 
     for (let r = 0; r < state.grid.rows; r++) {
         for (let c = 0; c < state.grid.cols; c++) {
-            const zone = zones[Math.floor(Math.random() * zones.length)];
-            const sx = zone.xMin + Math.random() * (zone.xMax - zone.xMin);
-            const sy = zone.yMin + Math.random() * (zone.yMax - zone.yMin);
+            let sx, sy;
+            if (zones.length > 0) {
+                const zone = zones[Math.floor(Math.random() * zones.length)];
+                sx = zone.xMin + Math.random() * (zone.xMax - zone.xMin);
+                sy = zone.yMin + Math.random() * (zone.yMax - zone.yMin);
+            } else {
+                sx = Math.random() * (800 - pw);
+                sy = Math.random() * (600 - ph);
+            }
             state.pieces.push({
                 id: `p_${r}_${c}`,
-                gx: c * pw,
-                gy: r * ph,
+                gx: boardX + c * pw,
+                gy: boardY + r * ph,
                 x: sx,
                 y: sy,
                 locked: false
@@ -212,25 +230,37 @@ function draw() {
     if (!state.ctx) return;
     const cw = state.canvas.width;
     const ch = state.canvas.height;
-    const pw = cw / state.grid.cols;
-    const ph = ch / state.grid.rows;
+    
+    const boardWidth = 480;
+    const boardHeight = 360;
+    const boardX = 160;
+    const boardY = 120;
+    const pw = boardWidth / state.grid.cols;
+    const ph = boardHeight / state.grid.rows;
 
     state.ctx.clearRect(0, 0, cw, ch);
 
-    // Draw target grid lines
-    state.ctx.strokeStyle = "rgba(22, 29, 31, 0.12)";
+    // Draw central board background
+    state.ctx.fillStyle = "rgba(22, 29, 31, 0.03)";
+    state.ctx.fillRect(boardX, boardY, boardWidth, boardHeight);
+    state.ctx.strokeStyle = "rgba(22, 29, 31, 0.15)";
+    state.ctx.lineWidth = 2;
+    state.ctx.strokeRect(boardX, boardY, boardWidth, boardHeight);
+
+    // Draw inner grid lines
+    state.ctx.strokeStyle = "rgba(22, 29, 31, 0.08)";
     state.ctx.lineWidth = 1;
     for (let r = 0; r < state.grid.rows; r++) {
         for (let c = 0; c < state.grid.cols; c++) {
-            state.ctx.strokeRect(c * pw, r * ph, pw, ph);
+            state.ctx.strokeRect(boardX + c * pw, boardY + r * ph, pw, ph);
         }
     }
 
-    const scaleX = state.image.naturalWidth / cw;
-    const scaleY = state.image.naturalHeight / ch;
+    const scaleX = state.image.naturalWidth / boardWidth;
+    const scaleY = state.image.naturalHeight / boardHeight;
 
-    state.pieces.forEach(p => { if (p !== state.draggedPiece) drawPiece(p, pw, ph, scaleX, scaleY); });
-    if (state.draggedPiece) drawPiece(state.draggedPiece, pw, ph, scaleX, scaleY);
+    state.pieces.forEach(p => { if (p !== state.draggedPiece) drawPiece(p, pw, ph, scaleX, scaleY, boardX, boardY); });
+    if (state.draggedPiece) drawPiece(state.draggedPiece, pw, ph, scaleX, scaleY, boardX, boardY);
 
     // Draw remote cursors
     Object.values(state.otherCursors).forEach(c => {
@@ -247,7 +277,7 @@ function draw() {
     });
 }
 
-function drawPiece(p, pw, ph, scaleX, scaleY) {
+function drawPiece(p, pw, ph, scaleX, scaleY, boardX, boardY) {
     const ctx = state.ctx;
     ctx.save();
     if (!p.locked) {
@@ -259,7 +289,7 @@ function drawPiece(p, pw, ph, scaleX, scaleY) {
     ctx.beginPath();
     ctx.roundRect(p.x, p.y, pw, ph, 4);
     ctx.clip();
-    ctx.drawImage(state.image, p.gx * scaleX, p.gy * scaleY, pw * scaleX, ph * scaleY, p.x, p.y, pw, ph);
+    ctx.drawImage(state.image, (p.gx - boardX) * scaleX, (p.gy - boardY) * scaleY, pw * scaleX, ph * scaleY, p.x, p.y, pw, ph);
     ctx.restore();
     ctx.strokeStyle = p.locked ? "rgba(76, 179, 65, 0.6)" : "#161d1f";
     ctx.lineWidth = p.locked ? 2 : 2.5;
@@ -279,8 +309,10 @@ function getCanvasPos(e) {
 
 function onPointerDown(e) {
     const { x, y } = getCanvasPos(e);
-    const pw = state.canvas.width / state.grid.cols;
-    const ph = state.canvas.height / state.grid.rows;
+    const boardWidth = 480;
+    const boardHeight = 360;
+    const pw = boardWidth / state.grid.cols;
+    const ph = boardHeight / state.grid.rows;
     for (let i = state.pieces.length - 1; i >= 0; i--) {
         const p = state.pieces[i];
         if (!p.locked && x >= p.x && x <= p.x + pw && y >= p.y && y <= p.y + ph) {
@@ -407,16 +439,15 @@ function connectWS() {
                 state.grid.cols = msg.cols;
                 if (msg.players) updateActivePlayerText(msg.players);
 
+                if (state.canvas) {
+                    state.canvas.width = 800;
+                    state.canvas.height = 600;
+                }
+
                 if (msg.image_url && (!state.image.src || state.image.src !== msg.image_url)) {
                     state.image = new Image();
                     state.image.crossOrigin = "anonymous";
                     state.image.onload = () => {
-                        const container = document.querySelector(".border-dashed");
-                        if (container && state.canvas) {
-                            const rect = container.getBoundingClientRect();
-                            state.canvas.width = rect.width;
-                            state.canvas.height = rect.height;
-                        }
                         if (msg.pieces) state.pieces = msg.pieces;
                         updateProgressBar();
                         draw();
