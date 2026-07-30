@@ -226,6 +226,64 @@ function generatePieces() {
 }
 
 // ── Drawing ──
+function createJigsawPath(ctx, x, y, w, h, r, c, rows, cols) {
+    const top = r === 0 ? 0 : -(((r - 1) * cols + c) % 2 === 0 ? 1 : -1);
+    const left = c === 0 ? 0 : -((r + (c - 1)) % 2 === 0 ? 1 : -1);
+    const bottom = r === rows - 1 ? 0 : ((r * cols + c) % 2 === 0 ? 1 : -1);
+    const right = c === cols - 1 ? 0 : ((r + c) % 2 === 0 ? 1 : -1);
+    
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    
+    // 1. Top Edge (going right to x + w, y)
+    if (top === 0) {
+        ctx.lineTo(x + w, y);
+    } else {
+        ctx.lineTo(x + w * 0.35, y);
+        ctx.bezierCurveTo(x + w * 0.35, y - top * h * 0.15, x + w * 0.40, y - top * h * 0.20, x + w * 0.40, y - top * h * 0.20);
+        ctx.bezierCurveTo(x + w * 0.30, y - top * h * 0.25, x + w * 0.35, y - top * h * 0.30, x + w * 0.50, y - top * h * 0.30);
+        ctx.bezierCurveTo(x + w * 0.65, y - top * h * 0.30, x + w * 0.70, y - top * h * 0.25, x + w * 0.60, y - top * h * 0.20);
+        ctx.bezierCurveTo(x + w * 0.60, y - top * h * 0.20, x + w * 0.65, y - top * h * 0.15, x + w * 0.65, y);
+        ctx.lineTo(x + w, y);
+    }
+    
+    // 2. Right Edge (going down to x + w, y + h)
+    if (right === 0) {
+        ctx.lineTo(x + w, y + h);
+    } else {
+        ctx.lineTo(x + w, y + h * 0.35);
+        ctx.bezierCurveTo(x + w + right * w * 0.15, y + h * 0.35, x + w + right * w * 0.20, y + h * 0.40, x + w + right * w * 0.20, y + h * 0.40);
+        ctx.bezierCurveTo(x + w + right * w * 0.25, y + h * 0.30, x + w + right * w * 0.30, y + h * 0.35, x + w + right * w * 0.30, y + h * 0.50);
+        ctx.bezierCurveTo(x + w + right * w * 0.30, y + h * 0.65, x + w + right * w * 0.25, y + h * 0.70, x + w + right * w * 0.20, y + h * 0.60);
+        ctx.bezierCurveTo(x + w + right * w * 0.20, y + h * 0.60, x + w + right * w * 0.15, y + h * 0.65, x + w, y + h * 0.65);
+        ctx.lineTo(x + w, y + h);
+    }
+    
+    // 3. Bottom Edge (going left to x, y + h)
+    if (bottom === 0) {
+        ctx.lineTo(x, y + h);
+    } else {
+        ctx.lineTo(x + w * 0.65, y + h);
+        ctx.bezierCurveTo(x + w * 0.65, y + h + bottom * h * 0.15, x + w * 0.60, y + h + bottom * h * 0.20, x + w * 0.60, y + h + bottom * h * 0.20);
+        ctx.bezierCurveTo(x + w * 0.70, y + h + bottom * h * 0.25, x + w * 0.65, y + h + bottom * h * 0.30, x + w * 0.50, y + h + bottom * h * 0.30);
+        ctx.bezierCurveTo(x + w * 0.35, y + h + bottom * h * 0.30, x + w * 0.30, y + h + bottom * h * 0.25, x + w * 0.40, y + h + bottom * h * 0.20);
+        ctx.bezierCurveTo(x + w * 0.40, y + h + bottom * h * 0.20, x + w * 0.35, y + h + bottom * h * 0.15, x + w * 0.35, y + h);
+        ctx.lineTo(x, y + h);
+    }
+    
+    // 4. Left Edge (going up to x, y)
+    if (left === 0) {
+        ctx.lineTo(x, y);
+    } else {
+        ctx.lineTo(x, y + h * 0.65);
+        ctx.bezierCurveTo(x - left * w * 0.15, y + h * 0.65, x - left * w * 0.20, y + h * 0.60, x - left * w * 0.20, y + h * 0.60);
+        ctx.bezierCurveTo(x - left * w * 0.25, y + h * 0.70, x - left * w * 0.30, y + h * 0.65, x - left * w * 0.30, y + h * 0.50);
+        ctx.bezierCurveTo(x - left * w * 0.30, y + h * 0.35, x - left * w * 0.25, y + h * 0.30, x - left * w * 0.20, y + h * 0.40);
+        ctx.bezierCurveTo(x - left * w * 0.20, y + h * 0.40, x - left * w * 0.15, y + h * 0.35, x, y + h * 0.35);
+        ctx.lineTo(x, y);
+    }
+}
+
 function draw() {
     if (!state.ctx) return;
     const cw = state.canvas.width;
@@ -240,27 +298,8 @@ function draw() {
 
     state.ctx.clearRect(0, 0, cw, ch);
 
-    // Draw central board background
-    state.ctx.fillStyle = "rgba(22, 29, 31, 0.03)";
-    state.ctx.fillRect(boardX, boardY, boardWidth, boardHeight);
-    state.ctx.strokeStyle = "rgba(22, 29, 31, 0.15)";
-    state.ctx.lineWidth = 2;
-    state.ctx.strokeRect(boardX, boardY, boardWidth, boardHeight);
-
-    // Draw inner grid lines
-    state.ctx.strokeStyle = "rgba(22, 29, 31, 0.08)";
-    state.ctx.lineWidth = 1;
-    for (let r = 0; r < state.grid.rows; r++) {
-        for (let c = 0; c < state.grid.cols; c++) {
-            state.ctx.strokeRect(boardX + c * pw, boardY + r * ph, pw, ph);
-        }
-    }
-
-    const scaleX = state.image.naturalWidth / boardWidth;
-    const scaleY = state.image.naturalHeight / boardHeight;
-
-    state.pieces.forEach(p => { if (p !== state.draggedPiece) drawPiece(p, pw, ph, scaleX, scaleY, boardX, boardY); });
-    if (state.draggedPiece) drawPiece(state.draggedPiece, pw, ph, scaleX, scaleY, boardX, boardY);
+    state.pieces.forEach(p => { if (p !== state.draggedPiece) drawPiece(p, pw, ph, boardWidth, boardHeight, boardX, boardY); });
+    if (state.draggedPiece) drawPiece(state.draggedPiece, pw, ph, boardWidth, boardHeight, boardX, boardY);
 
     // Draw remote cursors
     Object.values(state.otherCursors).forEach(c => {
@@ -277,8 +316,12 @@ function draw() {
     });
 }
 
-function drawPiece(p, pw, ph, scaleX, scaleY, boardX, boardY) {
+function drawPiece(p, pw, ph, boardWidth, boardHeight, boardX, boardY) {
     const ctx = state.ctx;
+    const parts = p.id.split("_");
+    const r = parseInt(parts[1], 10);
+    const c = parseInt(parts[2], 10);
+
     ctx.save();
     if (!p.locked) {
         ctx.shadowColor = "rgba(22, 29, 31, 0.5)";
@@ -286,15 +329,16 @@ function drawPiece(p, pw, ph, scaleX, scaleY, boardX, boardY) {
         ctx.shadowOffsetX = 3;
         ctx.shadowOffsetY = 3;
     }
-    ctx.beginPath();
-    ctx.roundRect(p.x, p.y, pw, ph, 4);
+    createJigsawPath(ctx, p.x, p.y, pw, ph, r, c, state.grid.rows, state.grid.cols);
     ctx.clip();
-    ctx.drawImage(state.image, (p.gx - boardX) * scaleX, (p.gy - boardY) * scaleY, pw * scaleX, ph * scaleY, p.x, p.y, pw, ph);
+    
+    ctx.translate(p.x - (p.gx - boardX), p.y - (p.gy - boardY));
+    ctx.drawImage(state.image, 0, 0, boardWidth, boardHeight);
     ctx.restore();
+    
     ctx.strokeStyle = p.locked ? "rgba(76, 179, 65, 0.6)" : "#161d1f";
     ctx.lineWidth = p.locked ? 2 : 2.5;
-    ctx.beginPath();
-    ctx.roundRect(p.x, p.y, pw, ph, 4);
+    createJigsawPath(ctx, p.x, p.y, pw, ph, r, c, state.grid.rows, state.grid.cols);
     ctx.stroke();
 }
 
